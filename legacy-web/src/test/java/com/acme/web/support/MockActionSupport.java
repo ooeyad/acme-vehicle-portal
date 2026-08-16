@@ -36,6 +36,15 @@ public final class MockActionSupport {
         return new RequestState();
     }
 
+    /** Records headers set on the response so a test can assert on them. Added for issue #5. */
+    public static final class ResponseState {
+        public final Map<String, String> headers = new HashMap<String, String>();
+    }
+
+    public static ResponseState newResponseState() {
+        return new ResponseState();
+    }
+
     /**
      * @return a request that supports getAttribute, setAttribute and removeAttribute,
      *         plus getParameter returning null. Everything else throws.
@@ -78,7 +87,17 @@ public final class MockActionSupport {
                 });
     }
 
+    /** A response that discards everything. Unchanged behaviour for the Action tests. */
     public static HttpServletResponse response() {
+        return response(newResponseState());
+    }
+
+    /**
+     * @return a response that records setHeader/addHeader into the given state and answers
+     *         getHeader and containsHeader from it. Everything else returns null, so an
+     *         Action or filter calling something else is not derailed by this double.
+     */
+    public static HttpServletResponse response(final ResponseState state) {
         return (HttpServletResponse) Proxy.newProxyInstance(
                 MockActionSupport.class.getClassLoader(),
                 new Class<?>[]{HttpServletResponse.class},
@@ -86,9 +105,19 @@ public final class MockActionSupport {
                     @Override
                     public Object invoke(Object proxy, Method method, Object[] args) {
                         String name = method.getName();
+                        if ("setHeader".equals(name) || "addHeader".equals(name)) {
+                            state.headers.put((String) args[0], (String) args[1]);
+                            return null;
+                        }
+                        if ("getHeader".equals(name)) {
+                            return state.headers.get(args[0]);
+                        }
+                        if ("containsHeader".equals(name)) {
+                            return Boolean.valueOf(state.headers.containsKey(args[0]));
+                        }
                         if ("hashCode".equals(name)) { return System.identityHashCode(proxy); }
                         if ("equals".equals(name)) { return proxy == args[0]; }
-                        if ("toString".equals(name)) { return "MockResponse"; }
+                        if ("toString".equals(name)) { return "MockResponse" + state.headers; }
                         return null;
                     }
                 });
