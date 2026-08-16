@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE struts-config PUBLIC
+  "-//Apache Software Foundation//DTD Struts Configuration 1.3//EN"
+  "http://struts.apache.org/dtds/struts-config_1_3.dtd">
+
+<struts-config>
+
+  <form-beans>
+    <form-bean name="vehicleLookupForm"
+               type="com.acme.web.form.VehicleLookupForm"/>
+    <form-bean name="dealerInventoryForm"
+               type="com.acme.web.form.DealerInventoryForm"/>
+  </form-beans>
+
+  <global-forwards>
+    <forward name="error" path="/WEB-INF/jsp/error.jsp"/>
+  </global-forwards>
+
+  <action-mappings>
+
+    <!-- REFERENCE MAPPING. Copy this shape for new actions.
+         input= is where validation failures return to.
+         Forward names are referenced by JSPs: do not rename without updating them. -->
+    <action path="/vehicle/lookup"
+            type="com.acme.web.action.VehicleLookupAction"
+            name="vehicleLookupForm"
+            scope="request"
+            validate="true"
+            input="/WEB-INF/jsp/vehicle/lookup.jsp">
+      <forward name="success" path="/WEB-INF/jsp/vehicle/lookupResult.jsp"/>
+      <forward name="failure" path="/WEB-INF/jsp/vehicle/lookup.jsp"/>
+    </action>
+
+    <!-- Issue #1: dealer inventory. Same shape as /vehicle/lookup above.
+         Results render on the same JSP as the form, so both forwards point at it. -->
+    <action path="/vehicle/inventory"
+            type="com.acme.web.action.DealerInventoryAction"
+            name="dealerInventoryForm"
+            scope="request"
+            validate="true"
+            input="/WEB-INF/jsp/vehicle/dealerInventory.jsp">
+      <forward name="success" path="/WEB-INF/jsp/vehicle/dealerInventory.jsp"/>
+      <forward name="failure" path="/WEB-INF/jsp/vehicle/dealerInventory.jsp"/>
+    </action>
+
+  </action-mappings>
+
+  <message-resources parameter="MessageResources"/>
+
+</struts-config>

@@ -1,0 +1,10 @@
+target/
+*.class
+*.war
+.settings/
+.project
+.classpath
+.idea/
+*.iml
+CLAUDE.local.md
+.claude/settings.local.json

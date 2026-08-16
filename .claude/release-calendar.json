@@ -1,0 +1,38 @@
+{
+  "_README": "THE single source of truth for where we are in the release cycle. Claude Code hooks read this file to decide what kind of work is safe right now. The release manager updates it once a month when freeze dates are announced - it takes two minutes and it is the highest-leverage two minutes in this whole setup. Dates are inclusive, ISO format, in the timezone below.",
+  "timezone": "Asia/Amman",
+  "preFreezeWarningDays": 3,
+  "iterations": [
+    {
+      "name": "2026.08",
+      "developmentStart": "2026-07-20",
+      "codeFreeze": "2026-08-12",
+      "goLive": "2026-08-19",
+      "releaseBranch": "release/2026.08",
+      "status": "stabilization",
+      "fixVersion": "2026.08"
+    },
+    {
+      "name": "2026.09",
+      "developmentStart": "2026-08-13",
+      "codeFreeze": "2026-09-09",
+      "goLive": "2026-09-16",
+      "releaseBranch": "release/2026.09",
+      "status": "development",
+      "fixVersion": "2026.09"
+    },
+    {
+      "name": "2026.10",
+      "developmentStart": "2026-09-10",
+      "codeFreeze": "2026-10-07",
+      "goLive": "2026-10-14",
+      "releaseBranch": "release/2026.10",
+      "status": "planned",
+      "fixVersion": "2026.10"
+    }
+  ],
+  "ticketPrefix": "#",
+  "ticketSystem": "github-issues",
+  "githubRepo": "acme/acme-vehicle-portal",
+  "_migrationNote": "When Jira arrives: set ticketSystem to \"jira\", ticketPrefix to your project key plus a dash (e.g. \"VP-\"), and replace jiraFixVersion below. Branch naming and every hook keep working unchanged."
+}

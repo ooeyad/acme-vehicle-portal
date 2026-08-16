@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# acme-backmerge-check - find fixes that landed on a release branch but never reached develop.
+#
+# This is the #1 failure mode of a freeze window that overlaps the next iteration: a bug
+# fixed during stabilization silently regresses when the next release ships. Run it daily
+# during the freeze window (see the release-manager checklist) and before every go-live.
+#
+# USAGE: acme-backmerge-check [release-branch]   (defaults to the newest origin/release/*)
+set -uo pipefail
+
+REL="${1:-}"
+if [ -z "$REL" ]; then
+  REL=$(git branch -r --list 'origin/release/*' | sed 's|.*origin/||' | sort | tail -1)
+fi
+[ -z "$REL" ] && { echo "No release branch found." >&2; exit 1; }
+
+git fetch -q origin 2>/dev/null || true
+
+MISSING=$(git log --no-merges --pretty='%h %s' "origin/develop..origin/${REL}" 2>/dev/null || true)
+
+if [ -z "$MISSING" ]; then
+  echo "OK: every commit on ${REL} is already in develop."
+  exit 0
+fi
+
+COUNT=$(printf '%s\n' "$MISSING" | wc -l | tr -d ' ')
+echo "WARNING: ${COUNT} commit(s) on ${REL} are NOT in develop."
+echo "These fixes will regress in the next iteration unless they are back-merged:"
+echo ""
+printf '%s\n' "$MISSING" | sed 's/^/  /'
+echo ""
+echo "To resolve:  git checkout develop && git merge --no-ff origin/${REL}"
+exit 1

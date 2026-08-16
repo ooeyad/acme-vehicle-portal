@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+
+  "extraKnownMarketplaces": {
+    "acme-standards": {
+      "source": { "source": "github", "repo": "acme/claude-standards" }
+    }
+  },
+
+  "enabledPlugins": {
+    "acme-core@acme-standards": true,
+    "acme-struts-db2@acme-standards": true
+  },
+
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [
+      "Bash(mvn -pl * -am test*)",
+      "Bash(mvn -q test*)",
+      "Bash(./mvnw *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git fetch *)",
+      "Bash(gh issue view *)",
+      "Bash(gh issue list *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr view *)",
+      "Bash(acme-backmerge-check *)"
+    ],
+    "deny": [
+      "Read(./**/target/**)",
+      "Read(./**/*.class)",
+      "Read(./legacy-web/WebContent/vendor/**)",
+      "Read(./**/generated-sources/**)",
+      "Bash(git push origin main*)",
+      "Bash(git push origin develop*)",
+      "Bash(git push origin release/*)"
+    ]
+  },
+
+  "worktree": {
+    "sparsePaths": [".claude", "legacy-web", "legacy-core", "db"]
+  }
+}

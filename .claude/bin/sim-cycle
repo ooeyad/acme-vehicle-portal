@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# sim-cycle - preview what Claude is told at any point in the release cycle.
+#
+# Two ways to use it:
+#   ./.claude/bin/sim-cycle 2026-09-10 release/2026.09    # preview one moment, changes nothing
+#   ./.claude/bin/sim-cycle timeline                      # preview the whole iteration
+#   export ACME_SIM_DATE=2026-09-10 && claude             # live session as if it were that date
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+HOOK="$ROOT/.claude/hooks/scripts/cycle-phase.sh"
+CAL="$ROOT/.claude/release-calendar.json"
+export CLAUDE_PROJECT_DIR="$ROOT"
+
+preview() {
+  local date="$1" branch="$2" saved
+  saved=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  git -C "$ROOT" checkout -q -B "$branch" >/dev/null 2>&1
+  printf '\n\033[1m── %s  on  %s ─────────────────────\033[0m\n' "$date" "$branch"
+  ACME_SIM_DATE="$date" bash "$HOOK" </dev/null | grep -v '^SIMULATION MODE' | sed 's/^/  /'
+  [ -n "$saved" ] && git -C "$ROOT" checkout -q "$saved" >/dev/null 2>&1
+}
+
+if [ "${1:-}" = "timeline" ]; then
+  IT=$(jq -r '.iterations[] | select(.name=="2026.09")' "$CAL")
+  FREEZE=$(printf '%s' "$IT" | jq -r .codeFreeze)
+  GOLIVE=$(printf '%s' "$IT" | jq -r .goLive)
+  echo "Walking iteration 2026.09   freeze=$FREEZE  go-live=$GOLIVE"
+  preview 2026-08-20 develop
+  preview 2026-09-07 develop
+  preview 2026-09-09 release/2026.09
+  preview 2026-09-10 develop
+  preview 2026-09-10 release/2026.09
+  preview 2026-09-15 hotfix/99-urgent
+  preview 2026-09-15 main
+  echo ""
+  echo "Same two days, two branches, opposite instructions. That overlap is the whole point."
+  exit 0
+fi
+
+[ $# -lt 1 ] && { echo "usage: sim-cycle <YYYY-MM-DD> [branch]   |   sim-cycle timeline" >&2; exit 2; }
+preview "$1" "${2:-develop}"
