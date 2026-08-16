@@ -9,9 +9,7 @@ import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -21,8 +19,20 @@ import static org.junit.Assert.assertTrue;
  * The filter's whole contract is three headers and an unbroken chain, so that is what this
  * asserts. The ordering test is the one that matters: headers set after the chain runs are
  * headers set after Struts has committed the response, which silently does nothing.
+ *
+ * Header values are asserted as LITERALS, never against NoStoreCacheFilter's own constants.
+ * assertEquals(NoStoreCacheFilter.CACHE_CONTROL, actual) only proves the filter used its own
+ * constant - editing that constant to drop no-store, which is the entire point of issue #5,
+ * would leave such an assertion green. The literal is the requirement; the constant is an
+ * implementation detail that has to keep matching it.
  */
 public class NoStoreCacheFilterTest {
+
+    /** The header values issue #5 requires. Duplicated from the filter on purpose - see above. */
+    private static final String EXPECTED_CACHE_CONTROL =
+            "no-store, no-cache, must-revalidate, max-age=0";
+    private static final String EXPECTED_PRAGMA = "no-cache";
+    private static final String EXPECTED_EXPIRES = "0";
 
     /** Records that the chain ran, and what the response looked like at that moment. */
     private static final class RecordingChain implements FilterChain {
@@ -32,7 +42,9 @@ public class NoStoreCacheFilterTest {
         @Override
         public void doFilter(ServletRequest request, ServletResponse response) {
             calls++;
-            cacheControlSeen = ((HttpServletResponse) response).getHeader("Cache-Control");
+            if (response instanceof HttpServletResponse) {
+                cacheControlSeen = ((HttpServletResponse) response).getHeader("Cache-Control");
+            }
         }
     }
 
@@ -47,11 +59,11 @@ public class NoStoreCacheFilterTest {
 
         new NoStoreCacheFilter().doFilter(request(), MockActionSupport.response(state), chain);
 
-        String cacheControl = state.headers.get("Cache-Control");
+        String cacheControl = state.header("Cache-Control");
         assertNotNull("no Cache-Control header was set", cacheControl);
         assertTrue("no-store is the directive that stops back-button replay: " + cacheControl,
                 cacheControl.contains("no-store"));
-        assertEquals(NoStoreCacheFilter.CACHE_CONTROL, cacheControl);
+        assertEquals(EXPECTED_CACHE_CONTROL, cacheControl);
     }
 
     @Test
@@ -61,8 +73,8 @@ public class NoStoreCacheFilterTest {
         new NoStoreCacheFilter().doFilter(request(), MockActionSupport.response(state),
                 new RecordingChain());
 
-        assertEquals(NoStoreCacheFilter.PRAGMA, state.headers.get("Pragma"));
-        assertEquals(NoStoreCacheFilter.EXPIRES, state.headers.get("Expires"));
+        assertEquals(EXPECTED_PRAGMA, state.header("Pragma"));
+        assertEquals(EXPECTED_EXPIRES, state.header("Expires"));
     }
 
     /**
@@ -77,8 +89,31 @@ public class NoStoreCacheFilterTest {
                 MockActionSupport.response(MockActionSupport.newResponseState()), chain);
 
         assertEquals("the chain must still run", 1, chain.calls);
-        assertEquals("Cache-Control was not on the response when the chain ran",
-                NoStoreCacheFilter.CACHE_CONTROL, chain.cacheControlSeen);
+        assertNotNull("Cache-Control was not on the response when the chain ran",
+                chain.cacheControlSeen);
+        assertTrue("no-store must be on the response before Struts can commit it: "
+                        + chain.cacheControlSeen,
+                chain.cacheControlSeen.contains("no-store"));
+        assertEquals(EXPECTED_CACHE_CONTROL, chain.cacheControlSeen);
+    }
+
+    /**
+     * setHeader, not addHeader. Two passes over the same response - a second registration of
+     * the filter, or a switch to addHeader - would emit Cache-Control twice, and intermediaries
+     * that resolve a duplicate by taking the first value can drop the no-store one.
+     */
+    @Test
+    public void emitsExactlyOneCacheControlValueEvenOnASecondPass() throws Exception {
+        MockActionSupport.ResponseState state = MockActionSupport.newResponseState();
+        HttpServletResponse response = MockActionSupport.response(state);
+
+        new NoStoreCacheFilter().doFilter(request(), response, new RecordingChain());
+        new NoStoreCacheFilter().doFilter(request(), response, new RecordingChain());
+
+        List<String> cacheControl = state.values("Cache-Control");
+        assertEquals("a duplicate Cache-Control header was emitted: " + cacheControl,
+                1, cacheControl.size());
+        assertEquals(EXPECTED_CACHE_CONTROL, cacheControl.get(0));
     }
 
     /**
@@ -87,28 +122,10 @@ public class NoStoreCacheFilterTest {
      */
     @Test
     public void passesANonHttpResponseStraightThrough() throws Exception {
-        final int[] calls = new int[1];
-        FilterChain chain = new FilterChain() {
-            @Override
-            public void doFilter(ServletRequest request, ServletResponse response) {
-                calls[0]++;
-            }
-        };
+        RecordingChain chain = new RecordingChain();
 
-        new NoStoreCacheFilter().doFilter(request(), plainResponse(), chain);
+        new NoStoreCacheFilter().doFilter(request(), MockActionSupport.plainResponse(), chain);
 
-        assertEquals(1, calls[0]);
-    }
-
-    private static ServletResponse plainResponse() {
-        return (ServletResponse) Proxy.newProxyInstance(
-                NoStoreCacheFilterTest.class.getClassLoader(),
-                new Class<?>[]{ServletResponse.class},
-                new InvocationHandler() {
-                    @Override
-                    public Object invoke(Object proxy, Method method, Object[] args) {
-                        return null;
-                    }
-                });
+        assertEquals("the request must still reach the application", 1, chain.calls);
     }
 }
