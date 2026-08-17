@@ -52,7 +52,7 @@ never use it in production code.
 
 Every change traces to a GitHub issue. Branch names carry the issue number and drive our tooling:
 `feature/12-slug`, `bugfix/12-slug`, `hotfix/12-slug`. The base branch depends on the issue type
-and where we are in the release cycle — use `/acme-core:start-work 12` rather than deciding by hand.
+and where we are in the release cycle — use `/start-work 12` rather than deciding by hand.
 
 Commit messages reference the issue so GitHub links them: `#12 <imperative summary>`. Do **not**
 write `fixes #12` or `closes #12` in a commit — that auto-closes the issue on merge, before anyone
