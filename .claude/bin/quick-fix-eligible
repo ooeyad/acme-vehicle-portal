@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# quick-fix-eligible - decide whether the current change qualifies for the fast lane.
+#
+# The fast lane skips plan mode, the reproduce-first test discipline, and the two review
+# subagents. That is only safe for changes that are BOTH small AND away from anything shared,
+# security-relevant, or structural. This script decides deterministically so the developer
+# and Claude do not have to argue about it.
+#
+# Exit 0 = eligible. Exit 1 = not eligible, with reasons. Exit 2 = nothing to assess.
+#
+# Run it after the edits and before committing: size cannot be known in advance.
+set -uo pipefail
+
+MAX_FILES=2
+MAX_LINES=50
+
+cd "${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}" || exit 2
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || { echo "Not a git repo."; exit 2; }
+reasons=()
+
+# --- 1. Freeze window: never. Stabilization demands the full defect discipline. ---
+case "$BRANCH" in
+  release/*)
+    echo "NOT ELIGIBLE"
+    echo "  - On $BRANCH. During a freeze window every change needs a bug issue, a regression"
+    echo "    test and a back-merge. Use /fix-defect instead."
+    exit 1 ;;
+  main|master|develop)
+    echo "NOT ELIGIBLE"
+    echo "  - On $BRANCH. Cut a chore/<slug> branch first."
+    exit 1 ;;
+esac
+
+# --- 2. Collect changed files: committed on this branch, staged, unstaged, untracked ---
+BASE=$(git merge-base develop HEAD 2>/dev/null || git rev-parse HEAD)
+tracked=$(git diff --name-only "$BASE" 2>/dev/null)
+untracked=$(git ls-files --others --exclude-standard)
+files=$(printf '%s\n%s\n' "$tracked" "$untracked" | grep -v '^$' | sort -u)
+
+[ -z "$files" ] && { echo "Nothing to assess - no changes."; exit 2; }
+
+# --- 3. Protected paths: shared, structural, security-relevant, or review-required ---
+while IFS= read -r f; do
+  case "$f" in
+    db/migration/*|*/db/migration/*)        reasons+=("$f - DB2 migrations are DBA-reviewed") ;;
+    web.xml|*/web.xml)                      reasons+=("$f - security filter chain, human + security review") ;;
+    pom.xml|*/pom.xml|*/package.json)       reasons+=("$f - build or dependency change") ;;
+    */struts-config.xml)                    reasons+=("$f - application structure") ;;
+    */BaseAction.java|*/ServiceLocator.java) reasons+=("$f - shared base class, every Action inherits it") ;;
+    */MockActionSupport.java)               reasons+=("$f - shared test infrastructure") ;;
+    *Dao.java|*DAO.java|*.sql)              reasons+=("$f - SQL needs db2-sql-reviewer") ;;
+    .claude/*)                              reasons+=("$f - changes the standard itself, needs review") ;;
+    *azure-pipelines*|*Jenkinsfile*|infra/*) reasons+=("$f - deployment configuration") ;;
+    *.gitattributes|.github/*)              reasons+=("$f - repository policy") ;;
+  esac
+done <<< "$files"
+
+# --- 4. Size caps ---
+count=$(printf '%s\n' "$files" | wc -l | tr -d ' ')
+[ "$count" -gt "$MAX_FILES" ] && reasons+=("$count files changed - fast lane allows $MAX_FILES")
+
+changed=$(git diff --numstat "$BASE" 2>/dev/null | awk '{a+=$1; d+=$2} END {print a+d+0}')
+for u in $untracked; do
+  [ -f "$u" ] && changed=$(( changed + $(wc -l < "$u") ))
+done
+[ "$changed" -gt "$MAX_LINES" ] && reasons+=("$changed lines changed - fast lane allows $MAX_LINES")
+
+# --- 5. Verdict ---
+if [ ${#reasons[@]} -gt 0 ]; then
+  echo "NOT ELIGIBLE for the fast lane:"
+  printf '  - %s\n' "${reasons[@]}"
+  echo ""
+  echo "Your work is safe on this branch. To escalate:"
+  echo "  1. Create a GitHub issue describing the change"
+  echo "  2. git branch -m <feature|bugfix>/<issue>-<slug>"
+  echo "  3. Continue with the full process and finish with /pr-ready"
+  exit 1
+fi
+
+echo "ELIGIBLE for the fast lane."
+echo "  $count file(s), $changed line(s), no protected paths, branch $BRANCH."
+exit 0

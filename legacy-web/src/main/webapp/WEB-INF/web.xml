@@ -10,6 +10,16 @@
   <!-- CHANGES TO THIS FILE REQUIRE SECURITY REVIEW.
        The security-constraint below is what keeps /vehicle/* behind authentication.
        A PreToolUse hook blocks agent edits to this file on purpose. -->
+  
+   <filter>
+    <filter-name>noStoreCache</filter-name>
+    <filter-class>com.acme.web.filter.NoStoreCacheFilter</filter-class>
+  </filter>
+
+  <filter-mapping>
+    <filter-name>noStoreCache</filter-name>
+    <url-pattern>/vehicle/*</url-pattern>
+  </filter-mapping>
 
   <servlet>
     <servlet-name>action</servlet-name>
